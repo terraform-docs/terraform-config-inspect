@@ -1,3 +1,6 @@
+**THIS IS AN UNMAINTAINED INTERNAL FORK, PLEASE REFER TO MAIN PROJECT AT
+https://github.com/terraform-docs/terraform-config-inspect**
+
 # terraform-config-inspect
 
 This repository contains a helper library for extracting high-level metadata
@@ -7,11 +10,11 @@ to be broadly compatible with modules written for many different versions of
 Terraform.
 
 ```
-$ go get github.com/hashicorp/terraform-config-inspect
+$ go get github.com/terraform-docs/terraform-config-inspect
 ```
 
 ```go
-import "github.com/hashicorp/terraform-config-inspect/tfconfig"
+import "github.com/terraform-docs/terraform-config-inspect/tfconfig"
 
 // ...
 
