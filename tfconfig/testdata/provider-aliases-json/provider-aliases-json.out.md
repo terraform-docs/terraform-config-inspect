@@ -1,5 +1,5 @@
 
-# Module `testdata/provider-aliases`
+# Module `testdata/provider-aliases-json`
 
 Provider Requirements:
 * **bar:** (any version)
