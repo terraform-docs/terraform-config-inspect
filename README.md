@@ -1,5 +1,5 @@
 **THIS IS AN UNMAINTAINED INTERNAL FORK, PLEASE REFER TO MAIN PROJECT AT
-https://github.com/terraform-docs/terraform-config-inspect**
+https://github.com/hashicorp/terraform-config-inspect**
 
 # terraform-config-inspect
 
