@@ -1,7 +1,13 @@
 version: 2.1
 
+executors:
+  go:
+    docker:
+      - image: docker.mirror.hashicorp.services/cimg/go:1.17
+
 jobs:
   test:
+<<<<<<< HEAD
     docker:
       - image: circleci/golang:<< parameters.go-version >>
     parameters:
@@ -10,16 +16,15 @@ jobs:
     environment:
       GO111MODULE: "on"
     working_directory: /go/src/github.com/terraform-docs/terraform-config-inspect
+=======
+    executor:
+      name: go
+>>>>>>> 1e58c11 (update circle config and docker mirror)
     steps:
       - checkout
       - run: go test
-      - run: go install .
 
 workflows:
   terraform-config-inspect:
     jobs:
-      - test:
-          matrix:
-            parameters:
-              go-version: ["1.17.3", "1.13.4"]
-          name: test-go-<< matrix.go-version >>
+      - test
