@@ -10,7 +10,11 @@ to be broadly compatible with modules written for many different versions of
 Terraform.
 
 ```
+<<<<<<< HEAD
 $ go get github.com/terraform-docs/terraform-config-inspect
+=======
+$ go install github.com/hashicorp/terraform-config-inspect@latest
+>>>>>>> 532f00b (update go get to go install command)
 ```
 
 ```go
@@ -42,28 +46,34 @@ information in either a Markdown-like format or in JSON format.
 ```sh
 $ terraform-config-inspect path/to/module
 ```
+
 ```markdown
 # Module `path/to/module`
 
 Provider Requirements:
-* **null:** (any version)
+
+- **null:** (any version)
 
 ## Input Variables
-* `a` (default `"a default"`)
-* `b` (required): The b variable
+
+- `a` (default `"a default"`)
+- `b` (required): The b variable
 
 ## Output Values
-* `a`
-* `b`: I am B
+
+- `a`
+- `b`: I am B
 
 ## Managed Resources
-* `null_resource.a` from `null`
-* `null_resource.b` from `null`
+
+- `null_resource.a` from `null`
+- `null_resource.b` from `null`
 ```
 
 ```sh
 $ terraform-config-inspect --json path/to/module
 ```
+
 ```json
 {
   "path": "path/to/module",
