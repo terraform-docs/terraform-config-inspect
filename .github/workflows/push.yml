@@ -1,0 +1,53 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
+name: Per-commit Checks
+
+on:
+  push:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit_tests:
+    name: "unit tests"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Fetch source code"
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: 1.18
+      - name: Go test
+        run: |
+          go test -cover ./...
+
+  fmt_and_vet:
+    name: "fmt and lint"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Fetch source code"
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: 1.18
+      - name: "Check vet"
+        run: |
+          go vet ./...
+      - name: "Check fmt"
+        run: |
+          go fmt ./...
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "Formatting is consistent with 'go fmt'."
+          else
+            echo "Run 'go fmt ./...' to automatically apply standard Go style to all packages."
+            git status --porcelain
+            exit 1
+          fi

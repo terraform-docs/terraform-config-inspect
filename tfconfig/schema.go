@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package tfconfig
 
 import (
@@ -71,6 +74,9 @@ var variableSchema = &hcl.BodySchema{
 		},
 		{
 			Name: "default",
+		},
+		{
+			Name: "sensitive",
 		},
 	},
 }

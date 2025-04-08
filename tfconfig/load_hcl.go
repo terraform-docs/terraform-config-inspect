@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package tfconfig
 
 import (
@@ -173,6 +176,13 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 				}
 			} else {
 				v.Required = true
+			}
+
+			if attr, defined := content.Attributes["sensitive"]; defined {
+				var sensitive bool
+				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &sensitive)
+				diags = append(diags, valDiags...)
+				v.Sensitive = sensitive
 			}
 
 		case "output":
