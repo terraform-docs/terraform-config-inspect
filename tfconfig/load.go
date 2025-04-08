@@ -128,6 +128,8 @@ func dirFiles(fs FS, dir string) (primary []string, diags hcl.Diagnostics) {
 func fileExt(path string) string {
 	if strings.HasSuffix(path, ".tf") {
 		return ".tf"
+	} else if strings.HasSuffix(path, ".tofu") {
+		return ".tofu"
 	} else if strings.HasSuffix(path, ".tf.json") {
 		return ".tf.json"
 	} else if strings.HasSuffix(path, ".pkr.hcl") {
