@@ -293,6 +293,12 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 						if strDiags.HasErrors() {
 							traversal = nil
 						}
+					} else {
+						// Final fallback attempt to retrieve traversal expression, ignoring any index provided
+						absTraversals := attr.Expr.Variables()
+						if len(absTraversals) > 0 {
+							traversal = attr.Expr.Variables()[0]
+						}
 					}
 				}
 
