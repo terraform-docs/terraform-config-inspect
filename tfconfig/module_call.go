@@ -10,5 +10,8 @@ type ModuleCall struct {
 	Source  string `json:"source"`
 	Version string `json:"version,omitempty"`
 
+	SourceExpr string `json:"source_expr,omitempty"`
+	VersionExpr string `json:"version_expr,omitempty"`
+
 	Pos SourcePos `json:"pos"`
 }
