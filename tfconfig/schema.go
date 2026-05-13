@@ -37,6 +37,10 @@ var rootSchema = &hcl.BodySchema{
 			Type:       "module",
 			LabelNames: []string{"name"},
 		},
+		{
+			Type:       "locals",
+			LabelNames: nil,
+		},
 	},
 }
 

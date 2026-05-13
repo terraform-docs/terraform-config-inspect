@@ -13,6 +13,8 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/convert"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 )
 
@@ -22,6 +24,7 @@ func loadModule(fs FS, dir string) (*Module, Diagnostics) {
 
 	parser := hclparse.NewParser()
 
+	files := make([]*hcl.File, 0, len(primaryPaths))
 	for _, filename := range primaryPaths {
 		var file *hcl.File
 		var fileDiags hcl.Diagnostics
@@ -44,8 +47,16 @@ func loadModule(fs FS, dir string) (*Module, Diagnostics) {
 		if file == nil {
 			continue
 		}
+		files = append(files, file)
+	}
 
-		contentDiags := LoadModuleFromFile(file, mod)
+	// First pass: collect variable defaults and locals so that module
+	// `source` and `version` arguments using them (a Terraform 1.15+
+	// feature) can be resolved.
+	evalCtx := buildEvalContext(files)
+
+	for _, file := range files {
+		contentDiags := LoadModuleFromFileWithContext(file, mod, evalCtx)
 		diags = append(diags, contentDiags...)
 	}
 
@@ -57,6 +68,15 @@ func loadModule(fs FS, dir string) (*Module, Diagnostics) {
 // e.g. because it will reuse these parsed files later for more detailed
 // interpretation.
 func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
+	return LoadModuleFromFileWithContext(file, mod, nil)
+}
+
+// LoadModuleFromFileWithContext is like LoadModuleFromFile, but accepts an
+// optional hcl.EvalContext that is used to resolve variable and local
+// references in module `source` and `version` arguments (a Terraform 1.15+
+// feature). If evalCtx is nil, the behavior is equivalent to
+// LoadModuleFromFile.
+func LoadModuleFromFileWithContext(file *hcl.File, mod *Module, evalCtx *hcl.EvalContext) hcl.Diagnostics {
 	var diags hcl.Diagnostics
 	content, _, contentDiags := file.Body.PartialContent(rootSchema)
 	diags = append(diags, contentDiags...)
@@ -348,20 +368,44 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 			if attr, defined := content.Attributes["source"]; defined {
 				var source string
 				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &source)
-				diags = append(diags, valDiags...)
-				mc.Source = source
+				if !valDiags.HasErrors() {
+					mc.Source = source
+				} else if isReferenceExpr(attr.Expr) {
+					// Terraform 1.15+ allows variables/locals here.
+					if v, ok := tryEvalString(attr.Expr, evalCtx); ok {
+						mc.Source = v
+					} else {
+						rng := attr.Expr.Range()
+						mc.SourceExpr = string(rng.SliceBytes(file.Bytes))
+					}
+				} else {
+					diags = append(diags, valDiags...)
+				}
 			}
 
-			if mc.Source == "" {
+			if mc.Source == "" && mc.SourceExpr == "" {
 				mc.Source = origSource
 			}
 
 			if attr, defined := content.Attributes["version"]; defined {
 				var version string
 				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &version)
-				diags = append(diags, valDiags...)
-				mc.Version = version
+				if !valDiags.HasErrors() {
+					mc.Version = version
+				} else if isReferenceExpr(attr.Expr) {
+					// Terraform 1.15+ allows variables/locals here.
+					if v, ok := tryEvalString(attr.Expr, evalCtx); ok {
+						mc.Version = v
+					} else {
+						rng := attr.Expr.Range()
+						mc.VersionExpr = string(rng.SliceBytes(file.Bytes))
+					}
+				} else {
+					diags = append(diags, valDiags...)
+				}
 			}
+
+		case "locals":
 
 		default:
 			// Should never happen because our cases above should be
@@ -371,4 +415,110 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 	}
 
 	return diags
+}
+
+// buildEvalContext walks the parsed files and constructs an hcl.EvalContext
+// containing variable defaults under `var` and resolved local values under
+// `local`. Locals that depend on other locals are resolved iteratively.
+//
+// This supports the Terraform 1.15+ feature that allows the `source` and
+// `version` arguments of a `module` block to reference variables and locals.
+func buildEvalContext(files []*hcl.File) *hcl.EvalContext {
+	vars := map[string]cty.Value{}
+	type pendingLocal struct {
+		name string
+		expr hcl.Expression
+	}
+	var locals []pendingLocal
+
+	for _, file := range files {
+		content, _, _ := file.Body.PartialContent(rootSchema)
+		for _, block := range content.Blocks {
+			switch block.Type {
+			case "variable":
+				if len(block.Labels) == 0 {
+					continue
+				}
+				name := block.Labels[0]
+				varContent, _, _ := block.Body.PartialContent(variableSchema)
+				attr, defined := varContent.Attributes["default"]
+				if !defined {
+					continue
+				}
+				val, valDiags := attr.Expr.Value(nil)
+				if valDiags.HasErrors() || !val.IsWhollyKnown() {
+					continue
+				}
+				vars[name] = val
+			case "locals":
+				attrs, _ := block.Body.JustAttributes()
+				for name, attr := range attrs {
+					locals = append(locals, pendingLocal{name: name, expr: attr.Expr})
+				}
+			}
+		}
+	}
+
+	resolved := map[string]cty.Value{}
+
+	mkCtx := func() *hcl.EvalContext {
+		ctx := &hcl.EvalContext{Variables: map[string]cty.Value{}}
+		if len(vars) > 0 {
+			ctx.Variables["var"] = cty.ObjectVal(vars)
+		}
+		if len(resolved) > 0 {
+			ctx.Variables["local"] = cty.ObjectVal(resolved)
+		}
+		return ctx
+	}
+
+	// Iteratively resolve locals so that locals depending on other locals
+	// can be evaluated. Bound to a small number of passes to avoid
+	// excessive cycle depth.
+	for i := 0; i < 5; i++ {
+		progressed := false
+		for _, p := range locals {
+			if _, done := resolved[p.name]; done {
+				continue
+			}
+			v, d := p.expr.Value(mkCtx())
+			if d.HasErrors() || !v.IsWhollyKnown() {
+				continue
+			}
+			resolved[p.name] = v
+			progressed = true
+		}
+		if !progressed {
+			break
+		}
+	}
+
+	return mkCtx()
+}
+
+// isReferenceExpr reports whether expr contains any variable traversals
+// (e.g. `var.foo`, `local.bar`). Pure literal expressions return false.
+func isReferenceExpr(expr hcl.Expression) bool {
+	return len(expr.Variables()) > 0
+}
+
+// tryEvalString attempts to evaluate expr against evalCtx and convert the
+// result to a string. Returns ("", false) if evalCtx is nil, the expression
+// has unresolved references, or the result is not convertible to a string.
+func tryEvalString(expr hcl.Expression, evalCtx *hcl.EvalContext) (string, bool) {
+	if evalCtx == nil {
+		return "", false
+	}
+	v, d := expr.Value(evalCtx)
+	if d.HasErrors() || v.IsNull() || !v.IsKnown() {
+		return "", false
+	}
+	if v.Type() != cty.String {
+		conv, err := convert.Convert(v, cty.String)
+		if err != nil {
+			return "", false
+		}
+		v = conv
+	}
+	return v.AsString(), true
 }
