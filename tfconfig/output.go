@@ -8,5 +8,6 @@ type Output struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
 	Sensitive   bool      `json:"sensitive,omitempty"`
+	Ephemeral   bool      `json:"ephemeral,omitempty"`
 	Pos         SourcePos `json:"pos"`
 }

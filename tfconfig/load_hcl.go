@@ -185,6 +185,24 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 				v.Sensitive = sensitive
 			}
 
+			if attr, defined := content.Attributes["ephemeral"]; defined {
+				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &v.Ephemeral)
+				diags = append(diags, valDiags...)
+			}
+
+			for _, validationBlock := range content.Blocks {
+				validationContent, _, validationDiags := validationBlock.Body.PartialContent(validationSchema)
+				diags = append(diags, validationDiags...)
+				validation := &Validation{Pos: sourcePosHCL(validationBlock.DefRange)}
+				if attr, defined := validationContent.Attributes["condition"]; defined {
+					validation.Condition = string(attr.Expr.Range().SliceBytes(file.Bytes))
+				}
+				if attr, defined := validationContent.Attributes["error_message"]; defined {
+					validation.ErrorMessage = string(attr.Expr.Range().SliceBytes(file.Bytes))
+				}
+				v.Validations = append(v.Validations, validation)
+			}
+
 		case "output":
 
 			content, _, contentDiags := block.Body.PartialContent(outputSchema)
@@ -210,6 +228,11 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &sensitive)
 				diags = append(diags, valDiags...)
 				o.Sensitive = sensitive
+			}
+
+			if attr, defined := content.Attributes["ephemeral"]; defined {
+				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &o.Ephemeral)
+				diags = append(diags, valDiags...)
 			}
 
 		case "provider":
@@ -346,10 +369,10 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 			mod.ModuleCalls[name] = mc
 
 			if attr, defined := content.Attributes["source"]; defined {
-				var source string
-				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &source)
+				source, expression, valDiags := decodeStringExpression(attr, file)
 				diags = append(diags, valDiags...)
 				mc.Source = source
+				mc.SourceExpression = expression
 			}
 
 			if mc.Source == "" {
@@ -357,10 +380,10 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 			}
 
 			if attr, defined := content.Attributes["version"]; defined {
-				var version string
-				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &version)
+				version, expression, valDiags := decodeStringExpression(attr, file)
 				diags = append(diags, valDiags...)
 				mc.Version = version
+				mc.VersionExpression = expression
 			}
 
 		default:
@@ -371,4 +394,16 @@ func LoadModuleFromFile(file *hcl.File, mod *Module) hcl.Diagnostics {
 	}
 
 	return diags
+}
+
+func decodeStringExpression(attr *hcl.Attribute, file *hcl.File) (string, string, hcl.Diagnostics) {
+	_, evalDiags := attr.Expr.Value(nil)
+	if evalDiags.HasErrors() {
+		expression := strings.TrimSpace(string(attr.Expr.Range().SliceBytes(file.Bytes)))
+		return "", expression, nil
+	}
+
+	var value string
+	decodeDiags := gohcl.DecodeExpression(attr.Expr, nil, &value)
+	return value, "", decodeDiags
 }

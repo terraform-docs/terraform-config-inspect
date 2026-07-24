@@ -78,8 +78,12 @@ var variableSchema = &hcl.BodySchema{
 		{
 			Name: "sensitive",
 		},
+		{Name: "ephemeral"},
 	},
+	Blocks: []hcl.BlockHeaderSchema{{Type: "validation"}},
 }
+
+var validationSchema = &hcl.BodySchema{Attributes: []hcl.AttributeSchema{{Name: "condition"}, {Name: "error_message"}}}
 
 var outputSchema = &hcl.BodySchema{
 	Attributes: []hcl.AttributeSchema{
@@ -89,6 +93,7 @@ var outputSchema = &hcl.BodySchema{
 		{
 			Name: "sensitive",
 		},
+		{Name: "ephemeral"},
 	},
 }
 
